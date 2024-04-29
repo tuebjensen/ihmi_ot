@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+  <node
+    pkg="object_tracker"
+    type="tracker_node.py"
+    name="tracker_node" 
+    output="screen"
+    args="$(find object_tracker)/models/best.pt"
+  />
+</launch> 

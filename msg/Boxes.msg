@@ -1,0 +1,4 @@
+Float32List[] bboxes_xywh
+UInt16List bboxes_cls
+Float32List bboxes_conf
+UInt16List tracking_ids
