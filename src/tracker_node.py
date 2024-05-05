@@ -34,50 +34,50 @@ class TrackerNode:
 
         self.cv_bridge = cv_bridge.CvBridge()
 
+        # Camera intrinsics
         self.width = 640
         self.height = 640
         self.fx = 554.25469
         self.fy = 554.25469
         self.cx = 320.5
         self.cy = 320.5
-        # self.msg.bboxes_cls = object_tracker.msg.UInt16List()
-        # self.msg.bboxes_conf = object_tracker.msg.Float32List()
-        # self.msg.bboxes_xywh = object_tracker.msg.Float32List()
-        # self.msg.tracking_ids = object_tracker.msg.UInt16List()
+
         rospy.loginfo('Tracker node started')
 
     def depth_map_callback(self, msg):
+        # Convert ROS Image message to OpenCV image
         self.depth_map = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
         self.depth_map_updated = True
     
     def color_img_callback(self, msg):
+        # Convert ROS Image message to OpenCV image
         self.color_img = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
         self.color_img_updated = True
 
     def pixel_to_camera(self, u, v):
-
-        # Perform pixel to world frame conversion
+        """ Given a pixel coordinate, return the corresponding camera frame coordinates """
+        # Perform pixel to camera frame conversion
         z = self.depth_map[v, u]
-        #if label == 'tennis ball':
-        #    z = z + 0.035 / 2
         x = (u - self.cx) * z / self.fx
         y = (v - self.cy) * z / self.fy
-        return np.array([z, x, -y], dtype=np.float32)
+        return np.array([z, -x, -y], dtype=np.float32)
 
     def pixel_to_world(self, u, v):
+        """ Given a pixel coordinate, return the corresponding world frame coordinates """
+        # Get camera pose
         cam_pose = self.get_kinect_position_srv('kinect', 'world').pose 
         cam_position = np.array([cam_pose.position.x, cam_pose.position.y, cam_pose.position.z])
         cam_quat = np.array([cam_pose.orientation.x, cam_pose.orientation.y, cam_pose.orientation.z, cam_pose.orientation.w])
-        cam_rotation = R.from_quat(cam_quat).inv()#.as_matrix()
-        # print(cam_position)
-        # cam_to_world = np.eye(4)
-        # cam_to_world[:3, :3] = cam_rotation
-        # cam_to_world[:3, 3] = cam_position
+        cam_rotation = R.from_quat(cam_quat).as_matrix()
+        
+        # Make homogenous transformation matrix 
+        # Vector in camera frame is rotated to be in line with camera orientation and then used to translate to world coordinate of object 
+        cam_to_world = np.eye(4)
+        cam_to_world[:3, :3] = cam_rotation
+        cam_to_world[:3, 3] = cam_position
 
         p_cam = self.pixel_to_camera(u, v)
-        p_cam_rot = cam_rotation.apply(p_cam)
-
-        p_world = p_cam_rot+cam_position#cam_to_world @ np.concatenate([p_cam, [1]])
+        p_world = cam_to_world @ np.concatenate([p_cam, [1]])
         return p_world[:3]
 
     def boxes_to_json(self, bboxes_cls, bboxes_label, bboxes_conf, tracking_ids, bboxes_xywh):
@@ -93,7 +93,6 @@ class TrackerNode:
             box['worldCoordinates'] = {'x': world_coordinates[0], 'y': world_coordinates[1], 'z': world_coordinates[2]}
             msg_data.append(box)
 
-        print(msg_data)
         return json.dumps(msg_data)
 
     def run(self):
@@ -109,11 +108,10 @@ class TrackerNode:
                 if boxes.id is not None:
                     tracking_ids = boxes.id.int().cpu().tolist()
 
-
-                self.msg.data = self.boxes_to_json(bboxes_cls, bboxes_label, bboxes_conf, tracking_ids, bboxes_xywh)
-                annotated_frame = results[0].plot()
-                cv2.imwrite('annotated_frame.jpg', annotated_frame)
+                # annotated_frame = results[0].plot()
+                # cv2.imwrite('annotated_frame.jpg', annotated_frame)
                 
+                self.msg.data = self.boxes_to_json(bboxes_cls, bboxes_label, bboxes_conf, tracking_ids, bboxes_xywh)
                 self.pub.publish(self.msg)
                 self.color_img_updated = False
                 self.depth_map_updated = False 
