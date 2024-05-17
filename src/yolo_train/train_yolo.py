@@ -10,9 +10,6 @@ epochs = 300
 freeze = 10
 cache = True
 
-
-
-
 model.train(data="datasets/gazebo_data.yaml", 
             epochs=epochs, 
             batch=batch, 
@@ -21,4 +18,4 @@ model.train(data="datasets/gazebo_data.yaml",
             pretrained=True,
             resume=False,
             freeze=freeze,
-            name = f'tennis-{epochs}-{batch}-{workers}')
+            name = f'gazebo-{epochs}-{batch}-{workers}')

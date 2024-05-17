@@ -1,0 +1,4 @@
+datasets/
+runs/
+src/yolo_train
+test_images/

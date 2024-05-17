@@ -1,7 +1,5 @@
 #!/home/tue/pytorch_env/pytorch_env/bin/python3
 import rospy
-import cv2
-import object_tracker.msg
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from ultralytics import YOLO
@@ -22,10 +20,10 @@ class TrackerNode:
         self.pub = rospy.Publisher('detection_data', String, queue_size=10)
         self.rate = rospy.Rate(20)
 
-        self.depth_map_sub = rospy.Subscriber('/camera/depth/image_raw', Image, self.depth_map_callback)
+        self.depth_img_sub = rospy.Subscriber('/camera/depth/image_raw', Image, self.depth_img_callback)
         self.color_img_sub = rospy.Subscriber('/camera/color/image_raw', Image, self.color_img_callback)
-        self.depth_map = None
-        self.depth_map_updated = False
+        self.depth_img = None
+        self.depth_img_updated = False
         self.color_img = None
         self.color_img_updated = False
         self.msg = String()
@@ -35,8 +33,8 @@ class TrackerNode:
         self.cv_bridge = cv_bridge.CvBridge()
 
         # Camera intrinsics
-        self.width = 640
-        self.height = 640
+        # self.width = 640
+        # self.height = 640
         self.fx = 554.25469
         self.fy = 554.25469
         self.cx = 320.5
@@ -44,10 +42,10 @@ class TrackerNode:
 
         rospy.loginfo('Tracker node started')
 
-    def depth_map_callback(self, msg):
+    def depth_img_callback(self, msg):
         # Convert ROS Image message to OpenCV image
-        self.depth_map = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-        self.depth_map_updated = True
+        self.depth_img = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+        self.depth_img_updated = True
     
     def color_img_callback(self, msg):
         # Convert ROS Image message to OpenCV image
@@ -57,7 +55,7 @@ class TrackerNode:
     def pixel_to_camera(self, u, v):
         """ Given a pixel coordinate, return the corresponding camera frame coordinates """
         # Perform pixel to camera frame conversion
-        z = self.depth_map[v, u]
+        z = self.depth_img[v, u]
         x = (u - self.cx) * z / self.fx
         y = (v - self.cy) * z / self.fy
         return np.array([z, -x, -y], dtype=np.float32)
@@ -78,18 +76,25 @@ class TrackerNode:
 
         p_cam = self.pixel_to_camera(u, v)
         p_world = cam_to_world @ np.concatenate([p_cam, [1]])
-        return p_world[:3]
+        return p_world[:3]/p_world[3]
 
-    def boxes_to_json(self, bboxes_cls, bboxes_label, bboxes_conf, tracking_ids, bboxes_xywh):
+    def boxes_to_json(self, boxes):
         msg_data = []
-        for i in range(len(bboxes_cls)):
+        boxes_cls = boxes.cls.int().cpu().tolist()
+        boxes_label = [classes[i] for i in boxes_cls]
+        boxes_conf = boxes.conf.cpu().tolist()
+        tracking_ids = None
+        boxes_xywh = boxes.xywh.cpu().tolist()
+        if boxes.id is not None:
+            tracking_ids = boxes.id.int().cpu().tolist()
+        for i in range(len(boxes_cls)):
             box = {}
-            box['class'] = bboxes_cls[i]
-            box['label'] = bboxes_label[i]
-            box['confidence'] = bboxes_conf[i]
+            box['class'] = boxes_cls[i]
+            box['label'] = boxes_label[i]
+            box['confidence'] = boxes_conf[i]
             box['tracking_id'] = tracking_ids[i] if tracking_ids is not None else None
-            box['boundingBox'] = {'x': bboxes_xywh[i][0], 'y': bboxes_xywh[i][1], 'w': bboxes_xywh[i][2], 'h': bboxes_xywh[i][3]}
-            world_coordinates = self.pixel_to_world(int(bboxes_xywh[i][0]), int(bboxes_xywh[i][1]))
+            box['boundingBox'] = {'x': boxes_xywh[i][0], 'y': boxes_xywh[i][1], 'w': boxes_xywh[i][2], 'h': boxes_xywh[i][3]}
+            world_coordinates = self.pixel_to_world(int(boxes_xywh[i][0]), int(boxes_xywh[i][1]))
             box['worldCoordinates'] = {'x': world_coordinates[0], 'y': world_coordinates[1], 'z': world_coordinates[2]}
             msg_data.append(box)
 
@@ -97,25 +102,20 @@ class TrackerNode:
 
     def run(self):
         while not rospy.is_shutdown():
-            if self.color_img_updated:
-                results = self.model.track(self.color_img, persist=True, verbose=False, classes=[0, 1], conf=0.5)
-                boxes = results[0].boxes
-                bboxes_cls = boxes.cls.int().cpu().tolist()
-                bboxes_label = [classes[i] for i in bboxes_cls]
-                bboxes_conf = boxes.conf.cpu().tolist()
-                tracking_ids = None
-                bboxes_xywh = boxes.xywh.cpu().tolist()
-                if boxes.id is not None:
-                    tracking_ids = boxes.id.int().cpu().tolist()
+            if not self.color_img_updated:
+                continue
 
-                # annotated_frame = results[0].plot()
-                # cv2.imwrite('annotated_frame.jpg', annotated_frame)
-                
-                self.msg.data = self.boxes_to_json(bboxes_cls, bboxes_label, bboxes_conf, tracking_ids, bboxes_xywh)
-                self.pub.publish(self.msg)
-                self.color_img_updated = False
-                self.depth_map_updated = False 
-                self.rate.sleep()
+            results = self.model.track(self.color_img, persist=True, verbose=False, classes=[0, 1], conf=0.5)
+            boxes = results[0].boxes
+
+            # annotated_frame = results[0].plot()
+            # cv2.imwrite('annotated_frame.jpg', annotated_frame)
+            
+            self.msg.data = self.boxes_to_json(boxes)
+            self.pub.publish(self.msg)
+            self.color_img_updated = False
+            self.depth_img_updated = False 
+            self.rate.sleep()
 
 
 if __name__ == '__main__':
