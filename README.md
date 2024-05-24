@@ -9,7 +9,7 @@
 ### Understanding the codebase
 The codebase is simple. The only interesting executable is the tracker node `tracker_node.py`. It handles the object tracking and object localization.
 
-Example output 
+### Example output 
 ```
 [
   {
