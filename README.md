@@ -1,3 +1,14 @@
+### Setup
+
+1. Install ROS Noetic http://wiki.ros.org/noetic/Installation/
+2. Install cv_bridge ROS package http://wiki.ros.org/cv_bridge
+3. Setup a virtual environment for Python containing PyTorch with CUDA installed https://www.cherryservers.com/blog/how-to-install-pytorch-ubuntu
+4. Install Ultralytics package inside the virtual environment https://docs.ultralytics.com/quickstart/#install-ultralytics
+5. Install other needed packages such as SciPy if it isn't installed by Ultralytics
+
+### Understanding the codebase
+The codebase is simple. The only interesting executable is the tracker node `tracker_node.py`. It handles the object tracking and object localization.
+
 Example output 
 ```
 [
