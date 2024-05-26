@@ -1,3 +1,7 @@
+# IHMI - Object Detection and Localization
+
+## Development
+
 ### Setup
 
 1. Install ROS Noetic http://wiki.ros.org/noetic/Installation/
@@ -9,7 +13,7 @@
 ### Understanding the codebase
 The codebase is simple. The only interesting executable is the tracker node `tracker_node.py`. It handles the object tracking and object localization.
 
-Example output 
+### Example output 
 ```
 [
   {
